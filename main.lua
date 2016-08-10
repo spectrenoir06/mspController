@@ -133,7 +133,7 @@ function love.update(dt)
 			local msg = ""
 			for i = 6, #buffer -1 do
 				local c = buffer:sub(i,i)
-				msg = msg..string.format("%x ",c:byte())
+				msg = msg..string.format("%X",c:byte())
 			end
 			print(msg)
 			msg_disp = msg
