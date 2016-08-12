@@ -23,6 +23,7 @@ local ffi = require'ffi'
 local bit = require'bit'
 
 roll, pitch, yaw, gaz = 0, 0, 0, 0
+aux1, aux2, aux3 = 0, 0, 0
 
 --------------------------------------------------------------------------------
 
@@ -95,21 +96,21 @@ end
 function love.update(dt)
 	-- print(dt,1/dt)
 
-	if love.keyboard.isDown("up") then
-		pitch = 50
-	elseif love.keyboard.isDown("down") then
-		pitch = -50
-	else
-		pitch = 0
-	end
-
-	if love.keyboard.isDown("left") then
-		roll = 50
-	elseif love.keyboard.isDown("right") then
-		roll = -50
-	else
-		roll = 0
-	end
+	-- if love.keyboard.isDown("up") then
+	-- 	pitch = 50
+	-- elseif love.keyboard.isDown("down") then
+	-- 	pitch = -50
+	-- else
+	-- 	pitch = 0
+	-- end
+	--
+	-- if love.keyboard.isDown("left") then
+	-- 	roll = 50
+	-- elseif love.keyboard.isDown("right") then
+	-- 	roll = -50
+	-- else
+	-- 	roll = 0
+	-- end
 
 
 	update_timer = update_timer + dt
@@ -117,7 +118,7 @@ function love.update(dt)
 		--msp_send(serial, MSP_SET_RAW_RC, 8, struct.pack("hhhhhhhh",1,2,3,4,5,6,7,8))
 		update_timer = 0
 
-		serial:write(struct.pack("bhhhhhh", 42, pitch, 200, 300, 400, 500, 600).."\n")
+		serial:write(struct.pack("hhhhhhh", gaz, roll, pitch, yaw, aux1, aux2, aux3))
 
 		-- data, buffer = readInput(serial)
 		-- if data then
@@ -140,6 +141,32 @@ function love.keypressed(key, scancode, isrepeat)
 
 	if key == "space" then
 		love.system.setClipboardText(msg_disp)
+	end
+end
+
+
+function love.joystickpressed( joystick, button )
+	print("button",button)
+	if button == 1 then
+		aux1 = (aux1 == 0) and 1023 or 0
+	end
+	if button == 2 then
+		aux2 = (aux2 == 0) and 1023 or 0
+	end
+	if button == 3 then
+		aux3 = (aux3 == 0) and 1023 or 0
+	end
+end
+
+function love.joystickaxis( joystick, axis, value )
+	if axis == 1 then
+		yaw = 511 * value + 512
+	elseif axis == 2 then
+		gaz = (511 * value + 512) * -1
+	elseif axis == 4 then
+		roll = 511 * value + 512
+	elseif axis == 5 then
+		pitch = (511 * value + 512) * -1
 	end
 end
 
