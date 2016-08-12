@@ -15,6 +15,7 @@ MSP_BAT        = 110
 love.joystick.loadGamepadMappings("gamecontrollerdb.map")
 
 
+
 function sleep(n)
 	os.execute("sleep "..tonumber(n))
 end
@@ -66,7 +67,7 @@ function printInput(serial)
 end
 
 function love.load(arg)
-	serial = Serial("/dev/ttyACM0", 115200)
+	serial = Serial("/dev/ttyACM3", 115200)
 	roll, pitch, yaw, gaz = 0, 0, 0, 0
 	update_timer = 0
 	msg_disp = ""
@@ -115,10 +116,23 @@ function love.update(dt)
 
 	update_timer = update_timer + dt
 	if update_timer > 0.05 then
+
+		yaw = 511 * joy:getGamepadAxis( "leftx" ) + 512
+		gaz = (511 * joy:getGamepadAxis( "lefty" ) + 512)
+		roll = 511 * joy:getGamepadAxis( "rightx" ) + 512
+		pitch = (511 * joy:getGamepadAxis( "righty" ) + 512)
+
+		aux1 = joy:getGamepadAxis( "triggerleft") * 1023
+
+		aux2 = joy:isGamepadDown("a") and 1023 or 0
+
+		print(aux1)
+
+
 		--msp_send(serial, MSP_SET_RAW_RC, 8, struct.pack("hhhhhhhh",1,2,3,4,5,6,7,8))
 		update_timer = 0
 
-		serial:write(struct.pack("hhhhhhh", gaz, roll, pitch, yaw, aux1, aux2, aux3))
+		serial:write(struct.pack("hhhhhhh", gaz, roll, pitch, yaw, aux1, aux2, aux3).."\n")
 
 		-- data, buffer = readInput(serial)
 		-- if data then
@@ -145,30 +159,25 @@ function love.keypressed(key, scancode, isrepeat)
 end
 
 
-function love.joystickpressed( joystick, button )
-	print("button",button)
-	if button == 1 then
-		aux1 = (aux1 == 0) and 1023 or 0
-	end
-	if button == 2 then
-		aux2 = (aux2 == 0) and 1023 or 0
-	end
-	if button == 3 then
-		aux3 = (aux3 == 0) and 1023 or 0
-	end
+-- function love.gamepadpressed( joystick, button )
+-- 	print("button",button)
+-- 	if button == "a" then
+-- 		aux1 = (aux1 == 0) and 1023 or 0
+-- 	end
+-- 	if button == "b" then
+-- 		aux2 = (aux2 == 0) and 1023 or 0
+-- 	end
+-- 	if button == "x" then
+-- 		aux3 = (aux3 == 0) and 1023 or 0
+-- 	end
+-- end
+
+
+function love.joystickadded( joystick )
+
+ joy = joystick
 end
 
-function love.joystickaxis( joystick, axis, value )
-	if axis == 1 then
-		yaw = 511 * value + 512
-	elseif axis == 2 then
-		gaz = (511 * value + 512) * -1
-	elseif axis == 4 then
-		roll = 511 * value + 512
-	elseif axis == 5 then
-		pitch = (511 * value + 512) * -1
-	end
-end
 
 
 function love.quit()
