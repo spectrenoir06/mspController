@@ -1,185 +1,128 @@
-local Serial = require('periphery').Serial
-local struct = require("struct")
 local bit = require("bit")
 
 local bnot = bit.bnot
 local band, bor, bxor = bit.band, bit.bor, bit.bxor
 local lshift, rshift, rol = bit.lshift, bit.rshift, bit.rol
+local tohex = bit.tohex
+local floor = math.floor
 
-MSP_SET_RAW_RC = 200
-MSP_SERIAL_UUID = 232
-MSP_ALTITUDE   = 109
-MSP_IDENT      = 100
-MSP_BAT        = 110
+local adresse = "F5:48:6D:6F:3E:56" -- peripheral adresse
 
-love.joystick.loadGamepadMappings("gamecontrollerdb.map")
+local roll, pitch, yaw, gaz = 0, 0, 0, 0
+local aux1, aux2, aux3 = 0, 0, 0
+local data = {}
 
-
-
-function sleep(n)
-	os.execute("sleep "..tonumber(n))
-end
-
-local ffi = require'ffi'
-local bit = require'bit'
-
-roll, pitch, yaw, gaz = 0, 0, 0, 0
-aux1, aux2, aux3 = 0, 0, 0
-
---------------------------------------------------------------------------------
-
-function writeCmdCallback(serial, cmd, wait, callback)
-	io.write("\n#"..cmd)
-	serial:write(cmd)
-	if wait and wait > 0 then
-		sleep(wait)
-	end
-	local input = ""
-	while not input:find(">") do
-		local data, buff = readInput(serial)
-		if buff then
-			input = input..buff
-		end
-	end
-	if type(callback) == "function" then
-		callback(data, buff or "")
-	end
-	io.write(":"..input)
-end
-
-function readInput(serial)
-	local bytes = serial:input_waiting()
-	-- print(bytes)
-	if bytes > 0 then
-		local buff = serial:read(bytes)
-		return true, buff
-	end
-	return false
-end
-
-function printInput(serial)
-	local data, buff = readInput(serial)
-	if data then
-		io.write(buff)
-		return true
-	end
-	return false
-end
+local font = nil
+local fontY = 0
 
 function love.load(arg)
-	serial = Serial("/dev/ttyACM3", 115200)
-	roll, pitch, yaw, gaz = 0, 0, 0, 0
+
 	update_timer = 0
-	msg_disp = ""
-	love.graphics.setFont(love.graphics.newFont(32))
-end
 
-function msp_send(serial, type, size, data)
-	if data == nil then data = "" end
-	checksum = bit.bxor(type, size)
-	for i = 1, #data do
-		local c = data:sub(i, i)
-		checksum = bit.bxor(checksum, c:byte())
-	end
-	local msg = "$M<" .. struct.pack("bb",type, size) .. data .. struct.pack("b", checksum)
+	love.joystick.loadGamepadMappings("gamecontrollerdb.map")
+	love.graphics.setNewFont(50)
+	font = love.graphics.getFont()
+	fontY = font:getHeight()
 
-	-- local msg = "$M<" .. struct.pack("bbb", 0, 232, 232) --.. "\n"
-	serial:write(msg)
-	local out = ""
-	for i = 1, #msg do
-		local c = msg:sub(i,i)
-		out = out..string.format("%X", c:byte())
-	end
-	print(out)
+	gatt = io.popen("gatttool -t random -b "..adresse.." -I > /dev/null", "w") -- run gatttool
+	gatt:write("connect\n"); -- connect to ble peripheral
+
 end
 
 
 function love.update(dt)
-	-- print(dt,1/dt)
-
-	-- if love.keyboard.isDown("up") then
-	-- 	pitch = 50
-	-- elseif love.keyboard.isDown("down") then
-	-- 	pitch = -50
-	-- else
-	-- 	pitch = 0
-	-- end
-	--
-	-- if love.keyboard.isDown("left") then
-	-- 	roll = 50
-	-- elseif love.keyboard.isDown("right") then
-	-- 	roll = -50
-	-- else
-	-- 	roll = 0
-	-- end
-
 
 	update_timer = update_timer + dt
-	if update_timer > 0.05 then
 
-		yaw = 511 * joy:getGamepadAxis( "leftx" ) + 512
-		gaz = (511 * joy:getGamepadAxis( "lefty" ) + 512)
-		roll = 511 * joy:getGamepadAxis( "rightx" ) + 512
-		pitch = (511 * joy:getGamepadAxis( "righty" ) + 512)
+	if update_timer > 0.025 then -- ( 40Hz = 0.025)
 
-		aux1 = joy:getGamepadAxis( "triggerleft") * 1023
-
-		aux2 = joy:isGamepadDown("a") and 1023 or 0
-
-		print(aux1)
-
-
-		--msp_send(serial, MSP_SET_RAW_RC, 8, struct.pack("hhhhhhhh",1,2,3,4,5,6,7,8))
 		update_timer = 0
 
-		serial:write(struct.pack("hhhhhhh", gaz, roll, pitch, yaw, aux1, aux2, aux3).."\n")
+		if joy then
+			gaz   = 511 * joy:getGamepadAxis( "lefty" ) + 512
+			yaw   = 511 * joy:getGamepadAxis( "leftx" ) + 512
+			roll  = 511 * joy:getGamepadAxis( "rightx" ) + 512
+			pitch = 511 * joy:getGamepadAxis( "righty" ) + 512
+		else
+			gaz, yaw, roll, pitch = 42, 42, 42, 42
+		end
 
-		-- data, buffer = readInput(serial)
-		-- if data then
-		-- 	local msg = ""
-		-- 	for i = 1, #buffer do
-		-- 		local c = buffer:sub(i,i)
-		-- 		msg = msg..string.format("%X",c:byte())
-		-- 	end
-		-- 	print(msg)
-		-- 	msg_disp = msg
-		-- end
+		for i=1,6 do data[i-1] = 0 end            -- memset(data, 0, sizeof(data))
+
+		data[0] = bor(data[0], rshift(gaz, 2))    -- data[0] |= gaz >> 2;
+		data[1] = bor(data[1], lshift(gaz, 6))    -- data[1] |= gaz << 6;
+
+		data[1] = bor(data[1], rshift(yaw, 4));   -- data[1] |= yaw >> 4;
+		data[2] = bor(data[2], lshift(yaw, 4));   -- data[2] |= yaw << 4;
+
+		data[2] = bor(data[2], rshift(roll, 6));  -- data[2] |= roll >> 6;
+		data[3] = bor(data[3], lshift(roll, 2));  -- data[3] |= roll << 2;
+
+		data[3] = bor(data[3], rshift(pitch, 8)); -- data[3] |= pitch >> 8;
+		data[4] = bor(data[4], lshift(pitch, 0)); -- data[4] |= pitch << 0;
+
+		data[5] = bor(data[5], lshift(aux1%4,4))  -- data[5] |= aux[0] << 4;
+		data[5] = bor(data[5], lshift(aux2%4,2))  -- data[5] |= aux[1] << 2;
+		data[5] = bor(data[5], lshift(aux3%4,0))  -- data[5] |= aux[2] << 0;
+
+		-- write data to handle 0x29
+		gatt:write(
+			"char-write-cmd 29 "..
+			tohex(data[0],2)..
+			tohex(data[1],2)..
+			tohex(data[2],2)..
+			tohex(data[3],2)..
+			tohex(data[4],2)..
+			tohex(data[5],2)..
+			"\n"
+		)
+		gatt:flush()
 	end
+
 end
+
 
 function love.draw()
-	love.graphics.print("serial: "..msg_disp, 10, 10)
+	love.graphics.print("gaz: "..floor(gaz),     10, fontY * 0)
+	love.graphics.print("yaw: "..floor(yaw),     10, fontY * 1)
+	love.graphics.print("roll: "..floor(roll) ,  10, fontY * 2)
+	love.graphics.print("pitch: "..floor(pitch), 10, fontY * 3)
+
+	love.graphics.print("aux1: "..floor(aux1), 10, fontY * 4)
+	love.graphics.print("aux2: "..floor(aux2), 10, fontY * 5)
+	love.graphics.print("aux3: "..floor(aux3), 10, fontY * 6)
 end
 
-function love.keypressed(key, scancode, isrepeat)
 
-	if key == "space" then
-		love.system.setClipboardText(msg_disp)
+function love.keypressed(key, scancode, isrepeat)
+	print(key)
+	if key == "escape" then love.event.quit() end
+end
+
+
+function love.gamepadpressed( joystick, button )
+	print("button",button)
+	if button == "a" then
+		aux1 = (aux1 + 1) % 4
+	end
+	if button == "b" then
+		aux2 = (aux2 + 1) % 4
+	end
+	if button == "x" then
+		aux3 = (aux3 + 1) % 4
 	end
 end
 
 
--- function love.gamepadpressed( joystick, button )
--- 	print("button",button)
--- 	if button == "a" then
--- 		aux1 = (aux1 == 0) and 1023 or 0
--- 	end
--- 	if button == "b" then
--- 		aux2 = (aux2 == 0) and 1023 or 0
--- 	end
--- 	if button == "x" then
--- 		aux3 = (aux3 == 0) and 1023 or 0
--- 	end
--- end
-
-
-function love.joystickadded( joystick )
-
- joy = joystick
+function love.joystickadded(joystick)
+	joy = joystick
 end
-
 
 
 function love.quit()
-	serial:close()
+	--serial:close()
+	print("quit")
+	gatt:write("quit\n")
+	gatt:flush()
+	os.execute("killall gatttool")
 end
