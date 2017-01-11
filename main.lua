@@ -82,7 +82,7 @@ function printInput(serial)
 end
 
 function love.load(arg)
-	serial = Serial("/dev/ttyUSB0", 115200)
+	serial = Serial("/dev/ttyACM1", 115200)
 	roll, pitch, yaw, gaz = 0, 0, 0, 0
 	update_timer = 0
 	msg_disp = ""
@@ -98,10 +98,11 @@ function msp_send(serial, type, size, data)
 	-- end
 	-- local msg = "$M<" .. struct.pack("bb",type, size) .. data .. struct.pack("b", checksum) --.. "\n"
 
-	local msg = "$M<" .. struct.pack("bbb", 0, 232, 232) --.. "\n"
+	local msg = "$M<" .. struct.pack("bbb", 0, 232, 232) .. "\n"
 	serial:write(msg)
 end
 
+local counter = 0
 
 function love.update(dt)
 	-- print(dt,1/dt)
@@ -124,19 +125,21 @@ function love.update(dt)
 
 
 	update_timer = update_timer + dt
-	if update_timer > 0.05 then
+	if update_timer > 0.02 then
 		-- msp_send(serial, MSP_SET_RAW_RC, 8, struct.pack("hhhhhhhh",1,2,3,4,5,6,7,8))
 		update_timer = 0
-		msp_send(serial, MSP_SERIAL_UUID, 0, "")
+		serial:write(struct.pack("B",counter).."\n")
+		counter = counter + 1
+		--msp_send(serial, MSP_SERIAL_UUID, 0, "")
 		data, buffer = readInput(serial)
 		if data then
-			local msg = ""
-			for i = 6, #buffer -1 do
-				local c = buffer:sub(i,i)
-				msg = msg..string.format("%x ",c:byte())
-			end
-			print(msg)
-			msg_disp = msg
+			--local msg = ""
+			--for i = 6, #buffer -1 do
+			--	local c = buffer:sub(i,i)
+			--	msg = msg..string.format("%x ",c:byte())
+			--end
+			print(buffer)
+			--msg_disp = msg
 		end
 	end
 end
