@@ -6,8 +6,9 @@ local bnot = bit.bnot
 local band, bor, bxor = bit.band, bit.bor, bit.bxor
 local lshift, rshift, rol = bit.lshift, bit.rshift, bit.rol
 
+MSP_STATUS = 101
 MSP_SET_RAW_RC = 200
-MSP_SERIAL_UUID = 232
+MSP_UID = 160
 MSP_ALTITUDE   = 109
 MSP_IDENT      = 100
 MSP_BAT        = 110
@@ -67,7 +68,7 @@ function printInput(serial)
 end
 
 function love.load(arg)
-	serial = Serial("/dev/ttyACM3", 115200)
+	serial = Serial("/dev/ttyACM0", 115200)
 	roll, pitch, yaw, gaz = 0, 0, 0, 0
 	update_timer = 0
 	msg_disp = ""
@@ -81,14 +82,14 @@ function msp_send(serial, type, size, data)
 		local c = data:sub(i, i)
 		checksum = bit.bxor(checksum, c:byte())
 	end
-	local msg = "$M<" .. struct.pack("bb",type, size) .. data .. struct.pack("b", checksum)
+	local msg = "$M<" .. struct.pack("bb",size, type) .. data .. struct.pack("b", checksum)
 
 	-- local msg = "$M<" .. struct.pack("bbb", 0, 232, 232) --.. "\n"
 	serial:write(msg)
 	local out = ""
 	for i = 1, #msg do
 		local c = msg:sub(i,i)
-		out = out..string.format("%X", c:byte())
+		out = out..string.format("%X ", c:byte())
 	end
 	print(out)
 end
@@ -126,24 +127,27 @@ function love.update(dt)
 
 		aux2 = joy:isGamepadDown("a") and 1023 or 0
 
-		print(aux1)
+		--print(aux1)
 
 
-		--msp_send(serial, MSP_SET_RAW_RC, 8, struct.pack("hhhhhhhh",1,2,3,4,5,6,7,8))
+		msp_send(serial, MSP_SET_RAW_RC, 8, struct.pack("hhhhhhhh",1,2,3,4,5,6,7,8))
 		update_timer = 0
 
-		serial:write(struct.pack("hhhhhhh", gaz, roll, pitch, yaw, aux1, aux2, aux3).."\n")
 
-		-- data, buffer = readInput(serial)
-		-- if data then
-		-- 	local msg = ""
-		-- 	for i = 1, #buffer do
-		-- 		local c = buffer:sub(i,i)
-		-- 		msg = msg..string.format("%X",c:byte())
-		-- 	end
-		-- 	print(msg)
-		-- 	msg_disp = msg
-		-- end
+		--msp_send(serial, MSP_UID, 0)
+
+		--serial:write(struct.pack("hhhhhhh", gaz, roll, pitch, yaw, aux1, aux2, aux3).."\n")
+
+		data, buffer = readInput(serial)
+		if data then
+			local msg = ""
+			for i = 1, #buffer do
+				local c = buffer:sub(i,i)
+				msg = msg..string.format("%X",c:byte())
+			end
+			print(msg)
+			msg_disp = msg
+		end
 	end
 end
 
